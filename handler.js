@@ -114,8 +114,8 @@ module.exports.scrap = async (event) => {
     const sendData = JSON.stringify(data)
 
   const options = {
-    hostname: 'talenthandong.site',
-    port: 443,
+    hostname: 'talent-handong.site',
+    port: 80,
     path: '/api/ndxBook/next',
     method: 'POST',
     headers: {

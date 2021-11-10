@@ -4,6 +4,7 @@ module.exports.scrap = async (event) => {
 
   const chromium = require('chrome-aws-lambda');
   const https = require('https')
+  const http = require('http')
 
   /* Account and URL Info */
   const loginUrl = "https://app.koyfin.com/login";
@@ -26,7 +27,10 @@ module.exports.scrap = async (event) => {
 
     const browser = await chromium.puppeteer.launch({
       args: chromium.args, 
-      defaultViewport: chromium.defaultViewport, 
+      defaultViewport: {
+        width: 3000,
+        height: 5000
+      }, 
       executablePath: await chromium.executablePath, 
       headless: true, ignoreHTTPSErrors: true, 
     });
@@ -123,8 +127,8 @@ module.exports.scrap = async (event) => {
       'Content-Length': sendData.length
     }
   }
-
-  const req = https.request(options, res => {
+  console.log(sendData)
+  const req = http.request(options, res => {
     
     return {
       statusCode: 200,

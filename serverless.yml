@@ -27,7 +27,7 @@ provider:
   stage: prd
   lambdaHashingVersion: 20201221
   iam:
-    role: arn:aws:iam::127480967991:role/hello-serverless
+    role: arn:aws:iam::935687064167:role/talent-scrap-lambda
 
 # you can overwrite defaults here
 #  stage: dev
@@ -64,7 +64,7 @@ functions:
   scrap:
     handler: handler.scrap
     layers:
-      - arn:aws:lambda:ap-northeast-2:127480967991:layer:aws-chrome-lambda:1
+      - arn:aws:lambda:ap-northeast-2:935687064167:layer:aws-chrome-lambda:1
     timeout: 30
 #    The following are a few example events you can configure
 #    NOTE: Please make sure to change your handler code to work with those events

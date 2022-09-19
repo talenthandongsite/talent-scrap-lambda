@@ -1,90 +1,95 @@
-const express = require('express');
-const { json } = require('express');
-const cors = require('cors');
-const { CronJob } = require('cron');
-const { koyfinJob } = require('./handler');
-const { CrawlKoyfin } = require('./crawl-koyfin');
+const puppeteer = require('puppeteer');
 
-const SERVER_PORT = 3000;
+const LOGIN_URL = "https://app.koyfin.com/login";
+const WATCHLIST_URL = "https://app.koyfin.com/myd/4af3aeda-0dfc-417d-a102-3f4c030d10e9";
 
-async function main() {
-    // global datastorage to use
-    const crawlingDataStorage = [];
+/**
+ * @description This function conducts crawling of Nasdaq data from external source.
+ * @param email {string} email address of account. This must be provided.
+ * @param password {string} password for account. This must be provided.
+ * @returns {string[][]} Array of strings with data. All data are stored as string. First row of array is header, 1~n elements are body row, and last row is summary row.
+*/
+async function crawlNasdaqData(email, password) {
 
-    /*
-        Crawling Job Registering
-        follow same pattern as koyfin
-        1) make object with key, schedule(cron expression), task(function to do), data(data output of cronjob), status(does it succed on last attempt?)
-        2) initialize data - maybe just fire up task function at the beginning
-        3) push it to data storage
-    */
-    class Koyfin {
-        constructor(key, schedule) {
-            this.key = key;
-            this.schedule = schedule;
-            this.data = null;
-            this.status = false;
-        }
-        async task() {
-            let rawString;
-            try {
-                rawString = await koyfinJob();
-            } catch (e) {
-                rawString = '';
-                this.status = false;
-                console.log(`[${(new Date()).toISOString()}][${this.key}] job failed. Error:\n${JSON.stringify(e)}`);
-                return;
-            }
-            this.data = rawString;
-            this.status = true;
-            console.log(`[${(new Date()).toISOString()}][${this.key}] job completed`);
-        } 
-    }
+    if (!email || !password) throw new Error("email, password parameter must be provided");
 
-    const crawlKoyfin = new CrawlKoyfin();
-
-    const koyfin = new Koyfin('koyfin', '0 * * * *');
-    await koyfin.task();
-    console.log(koyfin);
-    crawlingDataStorage.push(koyfin);
-
-    // fire cron job
-    crawlingDataStorage.forEach(({ schedule, task }) => {
-        const job = new CronJob(schedule, task, null, true, 'Asia/Seoul'); 
-        job.start();
+    const browser = await puppeteer.launch({
+        timeout: 100000,
+        defaultViewport: {
+            width: 3000,
+            height: 6000,
+        },
+        headless: true,
+        ignoreHTTPSErrors: true
     });
+    const page = await browser.newPage();
 
-    // HTTP Service
-    const app = express();
+    await page.goto(LOGIN_URL, { waitUntil: "networkidle0" });
+
+    let emailInput = await page.waitForSelector("input[name=email]");
+    let passwordInput = await page.waitForSelector("input[name=password]");
+
+    await emailInput.type(email);
+    await passwordInput.type(password);
+
+
+    await page.click('button[type="submit"]');
+    await page.waitForNetworkIdle()
     
+    await page.goto(WATCHLIST_URL, {waitUntil: "networkidle0" });
+    await page.waitForSelector("div[class^=base-table-row__root]");
 
-    app.use(cors());
-    app.use(json());
+    const data = await page.evaluate(async () => {
+        function getConvertedCsvRows(elementArray) {
+            const row = [];
+            elementArray.forEach((item) => {
+                if (item.textContent !== "") {
+                    let removedCommaStr = item.textContent.replace(/[,•]/g, '');
+                    row.push(removedCommaStr);
+                }
+            });
+            return row;
+        };
 
-    app.get('/', (_, res) => {
-        res.status(200).send("Crawler Service");
+        document.getElementsByClassName("fa-compress-wide")[0].parentElement.click();
+
+        const col = [];
+
+        /* table column names */
+        const headerRowElements = document.querySelector("div[class^=sortable-header-row__sortableHeaderRow]").childNodes;
+        const columnRows = getConvertedCsvRows(headerRowElements);
+        col.push(columnRows);
+
+        /* table body data*/
+        const bodyRowElements = document.getElementById("unclassified").childNodes[0].childNodes
+        bodyRowElements.forEach((tickerRow) => {
+            const eachRow = getConvertedCsvRows(tickerRow.childNodes);
+            col.push(eachRow);
+        });
+
+        return col;
     });
 
-    app.get('/:key', (req, res) => {
-        const key = req.params.key;
+    await browser.close();
 
-        const filtered = crawlingDataStorage.filter(job => job.key == key);
-        if (filtered.length == 0) {
-            res.status(400).send('Invalid key');
-            return;
-        }
-
-        const [ target ] = filtered;
-        if (!target.status) {
-            res.status(503).send('Currently unavailable. Please refer to log');
-            return;
-        }
-        res.status(200).send(target.data);
-    });
-
-    app.listen(SERVER_PORT, () => {
-        console.log(`Crawler Service is listening on localhost:${ SERVER_PORT }`);
-    });
+    return data;
 }
 
-main();
+/**
+ * @description Main function of this script. This function is for running this script standalone. If crawling is required as imported functions, import crawlNasdaqData function and use it.
+ * @arguments 1) email, 2) password must be provided
+*/
+(async () => {
+    let email;
+    let password;
+
+    if (process.argv.length < 4) throw new Error("must provide email, password arguments");
+    email = process.argv[2];
+    password = process.argv[3];
+
+    const data = await crawlNasdaqData(email, password);
+    process.stdout.write(JSON.stringify(data) + '\n');
+
+})();
+
+module.exports = { crawlNasdaqData };

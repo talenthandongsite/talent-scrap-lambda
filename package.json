@@ -1,18 +1,16 @@
 {
-  "name": "talent-scrap-lambda",
-  "version": "1.0.0",
-  "description": "",
-  "main": "handler.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "axios": "0.23.0",
-    "chrome-aws-lambda": "9.0.0",
-    "puppeteer": "9.0.0",
-    "puppeteer-core": "9.0.0"
-  }
+	"name": "talent-scrap-lambda",
+	"version": "1.0.0",
+	"description": "",
+	"main": "handler.js",
+	"scripts": {
+		"start": "node main",
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"dependencies": {
+		"puppeteer": "^17.1.3"
+	}
 }

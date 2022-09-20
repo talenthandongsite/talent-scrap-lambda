@@ -44,12 +44,15 @@ async function crawlNasdaqData(email, password) {
     await page.goto(WATCHLIST_URL, {waitUntil: "networkidle0" });
     await page.waitForNetworkIdle()
 
-    const userBlocked = await page.$("div[class^=registered-users-only-message__root]");
+    const userBlockedSelector = "div[class^=registered-users-only-message__root]";
+    const userBlocked = await page.$(userBlockedSelector);
     if (userBlocked) throw new Error("Somethings whent wrong while login to website");
 
-    await page.waitForSelector("div[class^=base-table-row__root]", {timeout: 0});
+    const firstBodyRowSelector = "div[class^=base-table-row__root]";
+    await page.waitForSelector(firstBodyRowSelector);
 
-    await page.click("button:has(> i.fa-compress-wide");
+    const setTableWideViewSelector = "button:has(> i.fa-compress-wide";
+    await page.click(setTableWideViewSelector);
 
     const col = [];
 
@@ -65,7 +68,6 @@ async function crawlNasdaqData(email, password) {
     for (let i = 0; i < bodyRowCount; i++) {
         const selector = `${bodyRowSelector}:nth-child(${i + 1}) > div`;
         const rows = await page.$$eval(selector, divs => divs.map(div => div.textContent.replace(/[,•]/g, '')));
-        if (!rows || rows.length) throw new Error("Something went wrong while getting table body");
         col.push(rows);
     }
 

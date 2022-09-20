@@ -1,5 +1,8 @@
 const puppeteer = require('puppeteer');
 
+const NAVIGATION_TIMEOUT = 10000;
+const TIMEOUT = 100000;
+
 const LOGIN_URL = "https://app.koyfin.com/login";
 const WATCHLIST_URL = "https://app.koyfin.com/myd/4af3aeda-0dfc-417d-a102-3f4c030d10e9";
 
@@ -14,65 +17,63 @@ async function crawlNasdaqData(email, password) {
     if (!email || !password) throw new Error("email, password parameter must be provided");
 
     const browser = await puppeteer.launch({
-        timeout: 100000,
         defaultViewport: {
-            width: 3000,
-            height: 6000,
+            width: 3600,
+            height: 4000,
         },
         headless: true,
         ignoreHTTPSErrors: true
     });
     const page = await browser.newPage();
 
-    await page.goto(LOGIN_URL, { waitUntil: "networkidle0" });
+    page.setDefaultNavigationTimeout(NAVIGATION_TIMEOUT);
+    page.setDefaultTimeout(TIMEOUT);
 
-    let emailInput = await page.waitForSelector("input[name=email]");
-    let passwordInput = await page.waitForSelector("input[name=password]");
+    await page.goto(LOGIN_URL, { waitUntil: "networkidle0" });
+    await page.waitForNetworkIdle();
+
+    const emailInput = await page.$("input[name=email]");
+    const passwordInput = await page.$("input[name=password]");
 
     await emailInput.type(email);
     await passwordInput.type(password);
-
 
     await page.click('button[type="submit"]');
     await page.waitForNetworkIdle()
     
     await page.goto(WATCHLIST_URL, {waitUntil: "networkidle0" });
-    await page.waitForSelector("div[class^=base-table-row__root]");
+    await page.waitForNetworkIdle()
 
-    const data = await page.evaluate(async () => {
-        function getConvertedCsvRows(elementArray) {
-            const row = [];
-            elementArray.forEach((item) => {
-                if (item.textContent !== "") {
-                    let removedCommaStr = item.textContent.replace(/[,•]/g, '');
-                    row.push(removedCommaStr);
-                }
-            });
-            return row;
-        };
+    const userBlockedSelector = "div[class^=registered-users-only-message__root]";
+    const userBlocked = await page.$(userBlockedSelector);
+    if (userBlocked) throw new Error("Somethings whent wrong while login to website");
 
-        document.getElementsByClassName("fa-compress-wide")[0].parentElement.click();
+    const firstBodyRowSelector = "div[class^=base-table-row__root]";
+    await page.waitForSelector(firstBodyRowSelector);
 
-        const col = [];
+    const setTableWideViewSelector = "button:has(> i.fa-compress-wide";
+    await page.click(setTableWideViewSelector);
 
-        /* table column names */
-        const headerRowElements = document.querySelector("div[class^=sortable-header-row__sortableHeaderRow]").childNodes;
-        const columnRows = getConvertedCsvRows(headerRowElements);
-        col.push(columnRows);
+    const col = [];
 
-        /* table body data*/
-        const bodyRowElements = document.getElementById("unclassified").childNodes[0].childNodes
-        bodyRowElements.forEach((tickerRow) => {
-            const eachRow = getConvertedCsvRows(tickerRow.childNodes);
-            col.push(eachRow);
-        });
+    const headerRowSelector = "div[class^=sortable-header-row__sortableHeaderRow] > div > div > div[class^=header-cell-content__headerCellContent]";
+    const headerRows = await page.$$eval(headerRowSelector, divs => divs.map(div => div.textContent.replace(/[,•]/g, '')));
+    if (!headerRows || headerRows.length == 0) throw new Error("Something went wrong with getting header");
+    col.push(headerRows);
 
-        return col;
-    });
+    const bodyRowSelector = "#unclassified > div > div[class^=base-table-row__root]";
+    const bodyRowCount = await page.$$eval(bodyRowSelector, divs => divs.length);
+    if (!bodyRowCount || bodyRowCount == 0) throw new Error("Something went wrong with getting table body count");
+
+    for (let i = 0; i < bodyRowCount; i++) {
+        const selector = `${bodyRowSelector}:nth-child(${i + 1}) > div`;
+        const rows = await page.$$eval(selector, divs => divs.map(div => div.textContent.replace(/[,•]/g, '')));
+        col.push(rows);
+    }
 
     await browser.close();
 
-    return data;
+    return col;
 }
 
 /**
@@ -88,7 +89,7 @@ async function crawlNasdaqData(email, password) {
     password = process.argv[3];
 
     const data = await crawlNasdaqData(email, password);
-    process.stdout.write(JSON.stringify(data) + '\n');
+    process.stdout.write(JSON.stringify(JSON.stringify(data)) + '\n');
 
 })();
 
